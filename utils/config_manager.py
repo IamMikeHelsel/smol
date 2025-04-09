@@ -23,9 +23,17 @@ class ConfigManager:
         self.config_dir = appdirs.user_config_dir(self.app_name, self.app_author)
         self.config_file = os.path.join(self.config_dir, "config.json")
         
-        # Create config directory if it doesn't exist
-        os.makedirs(self.config_dir, exist_ok=True)
-          # Default configuration
+        # Ensure the config directory exists
+        try:
+            os.makedirs(self.config_dir, exist_ok=True)
+            self.logger.info(f"Using configuration directory: {self.config_dir}")
+        except Exception as e:
+            self.logger.error(f"Failed to create config directory {self.config_dir}: {e}")
+            self.logger.warning("Will attempt to use current directory for configuration")
+            self.config_dir = os.path.dirname(os.path.abspath(__file__))
+            self.config_file = os.path.join(os.path.dirname(self.config_dir), "config.json")
+        
+        # Default configuration
         self.default_config = {
             "weather": {
                 "api_key": "",  # OpenWeatherMap API key
@@ -72,6 +80,10 @@ class ConfigManager:
                 # Merge with default config to ensure all keys exist
                 self._merge_with_defaults(config)
                 return config
+            except json.JSONDecodeError as e:
+                self.logger.error(f"Invalid JSON in config file: {e}")
+                self.logger.info("Using default configuration")
+                return self.default_config
             except Exception as e:
                 self.logger.error(f"Error loading config file: {e}")
                 self.logger.info("Using default configuration")
@@ -79,8 +91,13 @@ class ConfigManager:
         else:
             # Create default config file
             self.logger.info(f"No config file found, creating default at {self.config_file}")
-            self.save_config(self.default_config)
-            return self.default_config
+            try:
+                self.save_config(self.default_config)
+                return self.default_config
+            except Exception as e:
+                self.logger.error(f"Failed to create default config file: {e}")
+                self.logger.warning("Using default configuration in memory only")
+                return self.default_config
     
     def save_config(self, config):
         """
