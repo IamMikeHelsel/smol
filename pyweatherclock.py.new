@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+"""
+PyWeatherClock - A lightweight desktop widget displaying time, date, and weather information.
+"""
+
+import sys
+import os
+import threading
+import customtkinter as ctk
+from PIL import Image, ImageTk
+import time
+from datetime import datetime
+import logging
+import tkinter as tk  # Added for menu support
+
+# Import local modules
+from utils.config_manager import ConfigManager
+from utils.weather_api import WeatherAPI
+from ui.clock_widget import ClockWidget
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger('PyWeatherClock')
+
+class PyWeatherClock:
+    """Main application class for PyWeatherClock"""
+    
+    def __init__(self):
+        self.logger = logger
+        self.logger.info("Starting PyWeatherClock...")
+        
+        # Load configuration
+        self.config_manager = ConfigManager()
+        self.config = self.config_manager.load_config()
+        
+        # Initialize weather API
+        self.weather_api = WeatherAPI(self.config)
+        
+        # Set up the UI
+        self.setup_ui()
+        
+    def setup_ui(self):
+        """Set up the main application window and UI components"""
+        # Set appearance mode based on config
+        ctk.set_appearance_mode(self.config.get('ui', {}).get('theme', 'System'))
+        ctk.set_default_color_theme(self.config.get('ui', {}).get('color_theme', 'blue'))
+        
+        # Create the main window
+        self.root = ctk.CTk()
+        self.root.title("PyWeatherClock")
+        
+        # Set window properties from config
+        borderless = self.config.get('ui', {}).get('borderless', True)
+        stay_on_top = self.config.get('ui', {}).get('stay_on_top', True)
+        transparency = self.config.get('ui', {}).get('transparency', 0.9)
+        
+        # Configure window
+        if borderless:
+            self.root.overrideredirect(True)  # Remove window borders
+        
+        if stay_on_top:
+            self.root.attributes('-topmost', True)
+        
+        # Set transparency (Windows/macOS/Linux compatibility)
+        try:
+            if sys.platform == "win32":
+                self.root.attributes('-alpha', transparency)
+            elif sys.platform == "darwin":
+                self.root.attributes('-transparent', True)
+                self.root.attributes('-alpha', transparency)
+            else:  # Linux
+                self.root.attributes('-alpha', transparency)
+        except Exception as e:
+            self.logger.warning(f"Couldn't set transparency: {e}")
+        
+        # Set default size
+        width = self.config.get('ui', {}).get('width', 300)
+        height = self.config.get('ui', {}).get('height', 200)
+        self.root.geometry(f"{width}x{height}")
+        
+        # Create clock widget
+        self.clock_widget = ClockWidget(
+            self.root, 
+            self.config, 
+            self.weather_api
+        )
+        self.clock_widget.pack(fill="both", expand=True)
+        
+        # Add drag functionality for borderless window
+        if borderless:
+            self._add_drag_functionality()
+        
+        # Add right-click menu for settings/quit
+        self._add_context_menu()
+    
+    def _add_drag_functionality(self):
+        """Add drag functionality for moving borderless window"""
+        self.root.bind("<Button-1>", self._save_last_click_pos)
+        self.root.bind("<B1-Motion>", self._dragging)
+        
+    def _save_last_click_pos(self, event):
+        """Save the last click position for window dragging"""
+        self.lastClickX = event.x
+        self.lastClickY = event.y
+    
+    def _dragging(self, event):
+        """Handle window dragging"""
+        x, y = event.x - self.lastClickX + self.root.winfo_x(), event.y - self.lastClickY + self.root.winfo_y()
+        self.root.geometry(f"+{x}+{y}")
+    
+    def _add_context_menu(self):
+        """Add right-click context menu"""
+        # Use standard Tkinter menu instead of CTkMenu which doesn't exist
+        self.context_menu = tk.Menu(self.root, tearoff=0)
+        self.context_menu.add_command(label="Settings", command=self._open_settings)
+        self.context_menu.add_command(label="Exit", command=self.quit)
+        
+        # Bind right click to show menu
+        self.root.bind("<Button-3>", lambda event: self.context_menu.post(event.x_root, event.y_root))
+    
+    def _open_settings(self):
+        """Open settings dialog"""
+        # For future implementation - currently just a placeholder
+        self.logger.info("Settings dialog not yet implemented")
+        # TODO: Implement settings dialog
+    
+    def run(self):
+        """Run the main application loop"""
+        self.logger.info("Running main loop")
+        self.root.mainloop()
+    
+    def quit(self):
+        """Clean exit of the application"""
+        self.logger.info("Exiting application")
+        # Save any settings if needed
+        self.config_manager.save_config(self.config)
+        self.root.destroy()
+        sys.exit(0)
+
+if __name__ == "__main__":
+    app = PyWeatherClock()
+    app.run()
